@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Grafiplot · Gestión de pedidos</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- html2pdf -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root { color-scheme: light; --ink:#17243a; --muted:#718097; --line:#e5eaf0; --brand:#2463db; }
+        * { box-sizing:border-box; }
+        html,body,#root { min-height:100%; margin:0; }
+        body { background:#f5f7fb; color:var(--ink); font-family:'DM Sans',Arial,sans-serif; }
+        button,input,select { font:inherit; }
+        button { cursor:pointer; -webkit-tap-highlight-color:transparent; }
+        button:disabled { cursor:not-allowed; opacity:.55; }
+        input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+        :focus-visible { outline:3px solid #82adff; outline-offset:2px; }
+        .app-shell { min-height:100vh; display:grid; grid-template-columns:174px minmax(0,1fr); }
+        .sidebar { background:#142238; color:#e8eef8; display:flex; flex-direction:column; padding:24px 10px; gap:30px; }
+        .brand { display:flex; align-items:center; gap:8px; padding:0 5px; }
+        .brand-mark { display:grid; place-items:center; width:32px; height:32px; flex:none; border-radius:10px; background:#4585f6; color:white; box-shadow:0 8px 20px #071a3860; }
+        .brand-name { font:800 16px/1 'Manrope',sans-serif; letter-spacing:-.7px; }
+        .brand-sub { color:#93a9c4; font-size:9px; margin-top:4px; letter-spacing:.2px; }
+        .side-label { color:#8399b5; font-size:10px; font-weight:800; letter-spacing:1.7px; padding:0 13px; margin:0 0 12px; text-transform:uppercase; }
+        .side-nav { display:flex; flex-direction:column; gap:5px; }
+        .side-client { width:100%; display:flex; align-items:center; gap:8px; padding:9px 8px; background:transparent; color:#adbed2; border:1px solid transparent; border-radius:10px; text-align:left; font-size:12px; font-weight:700; transition:.2s; }
+        .side-client:hover { background:#ffffff12; color:#fff; }
+        .side-client.active { background:#ffffff16; color:#fff; border-color:#ffffff18; }
+        .side-client span:nth-child(2) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+        .side-client small { color:#8fa3bf; font-size:11px; }
+        .client-dot { width:9px; height:9px; flex:none; border-radius:50%; background:var(--accent); box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 19%,transparent); }
+        .side-foot { margin-top:auto; border-top:1px solid #ffffff1c; padding:20px 11px 0; color:#8fa3bf; font-size:12px; line-height:1.6; }
+        .side-foot strong { display:block; color:#dbe8f9; font-size:12px; margin-bottom:3px; }
+        .main { min-width:0; }
+        .topbar { min-height:78px; background:#fff; border-bottom:1px solid var(--line); padding:17px clamp(22px,3.5vw,54px); display:flex; align-items:center; justify-content:space-between; gap:16px; }
+        .breadcrumbs { display:flex; align-items:center; gap:10px; color:#8c9aaf; font-size:13px; font-weight:600; }
+        .breadcrumbs strong { color:#273a56; }
+        .top-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+        .btn { display:inline-flex; justify-content:center; align-items:center; gap:8px; border:1px solid var(--line); border-radius:10px; padding:10px 14px; background:#fff; color:#40516b; font-size:12px; font-weight:800; white-space:nowrap; transition:background .18s,transform .18s,box-shadow .18s; }
+        .btn:hover { background:#f5f8fd; transform:translateY(-1px); }
+        .btn svg { width:16px; height:16px; flex:none; }
+        .btn-primary { background:#2463db; color:white; border-color:#2463db; box-shadow:0 6px 16px #2463db30; }
+        .btn-primary:hover { background:#1653c6; }
+        .btn-soft { background:#edf4ff; color:#245dcc; border-color:#dbe9ff; }
+        .btn-danger { color:#ad4150; background:#fff; border-color:#f2dce0; }
+        .btn-danger:hover { background:#fff3f4; }
+        .content { max-width:1560px; margin:0 auto; padding:34px clamp(22px,3.5vw,54px) 55px; }
+        .page-heading { display:flex; justify-content:space-between; align-items:flex-end; gap:18px; margin-bottom:26px; }
+        .eyebrow { color:#3471d7; text-transform:uppercase; letter-spacing:1.8px; font-size:11px; font-weight:800; margin:0 0 8px; }
+        h1,h2,h3,p { margin-top:0; }
+        h1,h2,h3 { font-family:'Manrope',sans-serif; }
+        h1 { font-size:clamp(26px,3vw,34px); letter-spacing:-1.2px; line-height:1.18; margin-bottom:8px; }
+        .subtitle { color:var(--muted); font-size:13px; margin:0; }
+        .save-state { color:#5c7794; display:flex; align-items:center; gap:7px; font-size:12px; font-weight:700; white-space:nowrap; }
+        .save-state span { width:7px; height:7px; border-radius:50%; background:#37be8b; }
+        .heading-actions { display:flex; align-items:center; justify-content:flex-end; gap:12px; flex-wrap:wrap; }
+        .compact-bar { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; padding:12px 18px; background:#fff; border:1px solid var(--line); border-radius:13px; box-shadow:0 4px 16px #20375808; }
+        .compact-right { display:flex; align-items:center; gap:18px; flex-wrap:wrap; justify-content:flex-end; }
+        .compact-total { display:flex; align-items:baseline; gap:10px; white-space:nowrap; color:#70819b; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.6px; }
+        .compact-total strong { color:#203e72; font:800 22px/1 'Manrope',sans-serif; letter-spacing:-.6px; }
+        .side-add { margin-top:10px; width:100%; border:1px dashed #547291; border-radius:10px; background:#ffffff0b; color:#dceaff; padding:11px 12px; font-size:12px; font-weight:800; text-align:left; }
+        .side-add:hover { background:#ffffff20; border-color:#93b8e3; }
+        .mobile-tabs { display:none; }
+        .summary-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:15px; margin-bottom:23px; }
+        .summary-card { position:relative; min-height:119px; border:1px solid var(--line); border-radius:15px; background:#fff; padding:20px 22px; box-shadow:0 4px 16px #20375808; overflow:hidden; }
+        .summary-card.total { background:#203e72; border-color:#203e72; color:#fff; }
+        .summary-card.total:after { content:''; position:absolute; right:-23px; top:-63px; width:175px; height:175px; border:28px solid #ffffff0d; border-radius:50%; }
+        .summary-label { display:flex; align-items:center; gap:8px; color:#8492a6; font-size:11px; font-weight:800; letter-spacing:1px; text-transform:uppercase; }
+        .summary-card.total .summary-label { color:#bacded; }
+        .summary-value { font:800 clamp(22px,2.2vw,29px)/1.2 'Manrope',sans-serif; letter-spacing:-1px; margin-top:14px; }
+        .summary-note { color:#97a4b6; font-size:11px; margin-top:3px; }
+        .summary-card.total .summary-note { color:#bacded; }
+        .panel { border:1px solid var(--line); border-radius:16px; background:white; box-shadow:0 5px 22px #20375809; margin-bottom:20px; overflow:hidden; }
+        .panel-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:22px 25px; border-bottom:1px solid #edf0f4; }
+        .panel-title { font:800 16px/1.3 'Manrope',sans-serif; letter-spacing:-.35px; margin:0; }
+        .panel-desc { color:#91a0b2; font-size:12px; margin:5px 0 0; }
+        .panel-body { padding:23px 25px; }
+        .field-grid { display:grid; grid-template-columns:1.45fr 1fr; gap:18px; }
+        .field-label { display:block; color:#64748c; font-size:11px; font-weight:800; letter-spacing:.55px; text-transform:uppercase; margin-bottom:8px; }
+        .text-input,.product-select,.price-input { width:100%; background:#fbfcfe; border:1px solid #dfe6ee; border-radius:9px; color:#24344e; outline:none; height:43px; padding:0 13px; font-size:13px; font-weight:700; transition:.2s; }
+        .text-input:focus,.product-select:focus,.price-input:focus,.qty-input:focus { border-color:#6c9cf2; box-shadow:0 0 0 3px #dae8ff; background:#fff; }
+        .text-input::placeholder { color:#b1bed0; font-weight:500; }
+        .items-panel .panel-head { padding-bottom:20px; }
+        .table-wrap { overflow-x:auto; }
+        .items-table { border-collapse:collapse; width:100%; min-width:730px; table-layout:fixed; }
+        .items-table th { background:#f9fbfd; border-bottom:1px solid var(--line); text-align:left; color:#8190a5; font-size:10px; font-weight:800; letter-spacing:1px; text-transform:uppercase; padding:12px 18px; }
+        .items-table td { border-bottom:1px solid #edf0f4; padding:16px 18px; vertical-align:top; }
+        .items-table tbody tr:hover { background:#fcfdff; }
+        .items-table th:nth-child(1) { width:28%; padding-left:25px; }
+        .items-table th:nth-child(2) { width:14%; }
+        .items-table th:nth-child(3) { width:36%; }
+        .items-table th:nth-child(4) { width:15%; text-align:right; }
+        .items-table th:nth-child(5) { width:7%; }
+        .items-table td:first-child { padding-left:25px; }
+        .product-select,.price-input { height:42px; }
+        .price-input { text-align:right; }
+        .custom-product { display:flex; gap:6px; }
+        .custom-product .text-input { min-width:0; }
+        .qty-list { display:flex; flex-wrap:wrap; gap:7px; }
+        .qty-input { width:49px; height:42px; border:1px solid #dfe6ee; background:#fff; border-radius:8px; text-align:center; outline:none; color:#245dcc; font-weight:800; font-size:15px; transition:.2s; }
+        .qty-input::placeholder { color:#bac6d6; }
+        .row-total { text-align:right; font:800 15px/42px 'Manrope',sans-serif; white-space:nowrap; }
+        .row-total.empty { color:#b3bdcc; }
+        .icon-btn { display:inline-grid; place-items:center; width:38px; height:42px; border:1px solid transparent; background:transparent; border-radius:9px; color:#a3afbf; }
+        .icon-btn:hover { background:#fff1f2; color:#d5485a; }
+        .icon-btn svg { width:17px; height:17px; }
+        .product-footer { padding:17px 25px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+        .product-hint { font-size:11px; color:#9aa8ba; margin:0; }
+        .action-panel { padding:19px 24px; display:flex; justify-content:space-between; align-items:center; gap:18px; }
+        .action-panel h3 { font-size:15px; margin:0 0 4px; }
+        .action-panel p { color:#8d9bab; font-size:12px; margin:0; }
+        .action-buttons { display:flex; flex-wrap:wrap; gap:9px; }
+        .restore-input { display:none; }
+        .client-toggle { background:#f4f8ff; border:1px solid #e2eaf7; border-radius:9px; color:#315e9e; font-size:12px; font-weight:800; padding:9px 13px; }
+        .client-toggle:hover { background:#eaf2ff; }
+        .cloud-panel { border-color:#dce8f8; background:linear-gradient(110deg,#f8fbff,#fff); }
+        .cloud-status { font-size:12px; color:#718097; margin:4px 0 0; }
+        .cloud-actions { display:flex; flex-wrap:wrap; gap:8px; }
+        .pending-list { overflow:auto; display:grid; gap:9px; padding:16px; max-height:53vh; }
+        .pending-card { border:1px solid #e4eaf2; border-radius:11px; padding:13px; background:white; }
+        .pending-card-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+        .pending-card strong { font-size:13px; color:#263b58; }
+        .pending-card p { color:#8190a5; font-size:11px; margin:5px 0 12px; }
+        .pending-card-actions { display:flex; gap:8px; }
+        .pending-empty { color:#718097; font-size:13px; padding:20px; text-align:center; }
+        .cloud-login { display:grid; gap:12px; padding:20px; }
+        .cloud-login p { color:#718097; font-size:12px; margin:0; }
+        .cloud-error { background:#fff3f3; color:#ae3547; border-radius:8px; font-size:12px; padding:10px 12px; margin:0; }
+        .cloud-notice { background:#eaf8f1; color:#236c50; border-radius:8px; font-size:12px; padding:10px 12px; margin:0 0 16px; }
+        .pending-modal { width:min(100%,560px); }
+        .modal-overlay { position:fixed; inset:0; background:#0e1b2db8; backdrop-filter:blur(5px); z-index:50; display:grid; place-items:center; padding:16px; }
+        .receipt-modal { width:min(100%,410px); max-height:92vh; display:flex; flex-direction:column; overflow:hidden; background:white; border-radius:17px; box-shadow:0 25px 80px #06101d80; }
+        .receipt-modal-head { display:flex; justify-content:space-between; align-items:center; background:#172942; color:#fff; padding:17px 20px; }
+        .receipt-modal-head h3 { margin:0; font-size:15px; }
+        .receipt-preview { overflow:auto; background:#f2f5f9; padding:20px; display:flex; justify-content:center; }
+        .receipt-actions { padding:16px; display:grid; gap:8px; }
+        #receipt-print-area { box-shadow:0 8px 20px #14223820; }
+        @media(max-width:1050px) { .app-shell { grid-template-columns:160px minmax(0,1fr); } .sidebar { padding:23px 8px; } .topbar { flex-wrap:wrap; } }
+        @media(max-width:760px) { .app-shell { display:block; } .sidebar { display:none; } .topbar { padding:15px 18px; } .breadcrumbs { display:none; } .top-actions { width:100%; justify-content:space-between; } .top-actions .btn { flex:1; padding:10px 7px; } .top-actions .btn svg { display:none; } .content { padding:24px 15px 38px; } .page-heading { align-items:flex-start; } .save-state { margin-top:6px; } .mobile-tabs { display:flex; gap:7px; overflow-x:auto; padding:0 0 12px; margin-bottom:8px; scrollbar-width:thin; } .mobile-tab { flex:none; padding:9px 13px; border:1px solid var(--line); background:#fff; border-radius:9px; color:#72819a; font-size:12px; font-weight:800; } .mobile-tab.active { background:#203e72; border-color:#203e72; color:white; } .summary-grid { gap:8px; } .summary-card { min-height:100px; padding:14px 12px; } .summary-label { font-size:9px; line-height:1.3; } .summary-value { font-size:18px; margin-top:12px; } .summary-note { font-size:10px; } .panel-head,.panel-body { padding:18px; } .field-grid { grid-template-columns:1fr; gap:15px; } .product-footer { padding:15px 18px; } .action-panel { align-items:stretch; flex-direction:column; padding:18px; } .action-buttons .btn { flex:1; } }
+        @media(max-width:760px) { .compact-bar { flex-wrap:wrap; } .compact-right { justify-content:space-between; width:100%; } }
+        @media(max-width:420px) { .page-heading { flex-direction:column; gap:7px; } .summary-grid { grid-template-columns:1fr 1fr; } .summary-card.total { grid-column:1 / -1; min-height:95px; } .summary-card.total .summary-value { font-size:25px; margin-top:7px; } .summary-card:not(.total) { min-height:88px; } .summary-card:not(.total) .summary-value { margin-top:8px; } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const PREDEFINED_PRODUCTS = [
+            { id: 'a4', name: 'A4', price: 0.1 },
+            { id: 'a4_ambas', name: 'A4 AMBAS CARAS', price: 0.15 },
+            { id: 'a3', name: 'A3', price: 0.5 },
+            { id: 'a2', name: 'A2', price: 1.5 },
+            { id: 'a1', name: 'A1', price: 2.0 },
+            { id: 'a0', name: 'A0', price: 4.0 },
+            { id: 'folder', name: 'FOLDER', price: 1.0 },
+            { id: 'mica', name: 'MICA', price: 1.0 },
+            { id: 'anillado', name: 'ANILLADO', price: 1.5 },
+        ];
+
+        const CLIENT_THEMES = [
+            { id: 1, colorName: 'Azul', card: 'bg-blue-50 border-blue-400', header: 'bg-blue-600 text-white', btn: 'bg-blue-600 hover:bg-blue-700' },
+            { id: 2, colorName: 'Verde', card: 'bg-green-50 border-green-400', header: 'bg-green-600 text-white', btn: 'bg-green-600 hover:bg-green-700' },
+            { id: 3, colorName: 'Rojo', card: 'bg-red-50 border-red-400', header: 'bg-red-600 text-white', btn: 'bg-red-600 hover:bg-red-700' },
+            { id: 4, colorName: 'Amarillo', card: 'bg-yellow-50 border-yellow-400', header: 'bg-yellow-500 text-black', btn: 'bg-yellow-500 hover:bg-yellow-600' },
+            { id: 5, colorName: 'Morado', card: 'bg-purple-50 border-purple-400', header: 'bg-purple-600 text-white', btn: 'bg-purple-600 hover:bg-purple-700' },
+            { id: 6, colorName: 'Naranja', card: 'bg-orange-50 border-orange-400', header: 'bg-orange-500 text-white', btn: 'bg-orange-500 hover:bg-orange-600' },
+        ];
+
+        const evaluateExpression = (expr) => {
+            if (typeof expr !== 'string') return parseFloat(expr) || 0;
+            const sanitized = expr.replace(/[^0-9+\-*/.]/g, '');
+            if (!sanitized) return 0;
+            try {
+                let toEval = sanitized;
+                if (/[+\-*/.]$/.test(toEval)) toEval = toEval.slice(0, -1);
+                const result = new Function(`return ${toEval}`)();
+                return isNaN(result) || !isFinite(result) ? 0 : result;
+            } catch (e) {
+                return 0;
+            }
+        };
+
+        const Icon = ({ name, size = 17 }) => {
+            const shapes = {
+                download: <><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v3h16v-3"/></>,
+                upload: <><path d="M12 16V4m0 0-4 4m4-4 4 4"/><path d="M4 17v3h16v-3"/></>,
+                plus: <path d="M12 5v14M5 12h14"/>,
+                trash: <><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/><path d="M10 11v5m4-5v5"/></>,
+                receipt: <><path d="M5 3h14v18l-3-2-4 2-4-2-3 2V3Z"/><path d="M8 8h8m-8 4h8"/></>,
+                layers: <><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8m-8 4h8"/></>,
+                check: <path d="m5 12 4 4L19 6"/>,
+                close: <path d="M5 5l14 14M19 5 5 19"/>
+            };
+            return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{shapes[name]}</svg>;
+        };
+
+        const App = () => {
+            const [clients, setClients] = useState(() => {
+                const saved = localStorage.getItem('grafiplot_backup');
+                if (saved) {
+                    try { return JSON.parse(saved); } catch (e) { console.error("Error backup", e); }
+                }
+                return CLIENT_THEMES.map((theme, index) => ({
+                    id: theme.id,
+                    name: `CLIENTE ${index + 1}`,
+                    theme: theme,
+                    items: [{ 
+                        id: `item-${Date.now()}-${theme.id}`, 
+                        name: 'A4', 
+                        price: 0.1, 
+                        quantities: [''],
+                        isCustom: false 
+                    }]
+                }));
+            });
+
+            // NUEVA FUNCIÓN: Estado para controlar qué cliente (pestaña) se ve en pantalla completa
+            const [activeClientId, setActiveClientId] = useState(1);
+
+            const [activeReceipt, setActiveReceipt] = useState(null);
+            const [pdfLoading, setPdfLoading] = useState(false);
+            const [showClientInfo, setShowClientInfo] = useState(false);
+            const [showOverview, setShowOverview] = useState(() => localStorage.getItem('grafiplot_show_overview') !== 'false');
+            useEffect(() => { localStorage.setItem('grafiplot_show_overview', String(showOverview)); }, [showOverview]);
+            const [supabaseUrl, setSupabaseUrl] = useState(() => localStorage.getItem('grafiplot_supabase_url') || '');
+            const [supabaseKey, setSupabaseKey] = useState(() => localStorage.getItem('grafiplot_supabase_key') || '');
+            const [draftUrl, setDraftUrl] = useState(supabaseUrl);
+            const [draftKey, setDraftKey] = useState(supabaseKey);
+            const [cloudReady, setCloudReady] = useState(false);
+            const supabaseRef = useRef(null);
+            const [authUser, setAuthUser] = useState(null);
+            const [cloudEmail, setCloudEmail] = useState('');
+            const [cloudPassword, setCloudPassword] = useState('');
+            const [pendingOpen, setPendingOpen] = useState(false);
+            const [pendingOrders, setPendingOrders] = useState([]);
+            const [cloudBusy, setCloudBusy] = useState(false);
+            const [cloudError, setCloudError] = useState('');
+            const [cloudNotice, setCloudNotice] = useState('');
+            const [syncReady, setSyncReady] = useState(false);
+            const [syncStatus, setSyncStatus] = useState('local');
+            const [editingPending, setEditingPending] = useState(null);
+            const [showCollected, setShowCollected] = useState(false);
+            const saveQueueRef = useRef(Promise.resolve());
+            const saveSeqRef = useRef(0);
+            const pendingQueueRef = useRef(Promise.resolve());
+            const [pendingSyncStatus, setPendingSyncStatus] = useState('');
+
+            useEffect(() => {
+                setAuthUser(null); setCloudReady(false); supabaseRef.current = null;
+                if (!supabaseUrl || !supabaseKey || !window.supabase?.createClient) return;
+                let active = true;
+                try {
+                    const client = window.supabase.createClient(supabaseUrl, supabaseKey);
+                    supabaseRef.current = client;
+                    setCloudReady(true);
+                    client.auth.getSession().then(({data, error}) => {
+                        if (active && !error) setAuthUser(data.session?.user || null);
+                    }).catch(err => { if (active) setCloudError(describeCloudError(err)); });
+                    const {data:{subscription}} = client.auth.onAuthStateChange((_event, session) => {
+                        if (active) setAuthUser(session?.user || null);
+                    });
+                    return () => { active = false; subscription.unsubscribe(); };
+                } catch (err) { setCloudError('No se pudo iniciar Supabase. Revisa la URL y la clave pública.'); }
+            }, [supabaseUrl, supabaseKey]);
+
+            const describeCloudError = (err) => {
+                console.error('Supabase:', err);
+                if (err?.code === '42501' || /row-level security|permission denied/i.test(err?.message || '')) return 'Acceso denegado. Ejecuta el SQL y comprueba las políticas RLS.';
+                if (err?.code === 'PGRST205' || err?.code === '42P01') return 'Falta crear la tabla de sincronización. Ejecuta el SQL de actualización en Supabase.';
+                if (/invalid login credentials/i.test(err?.message || '')) return 'Correo o contraseña incorrectos.';
+                return err?.message || 'No se pudo conectar con Supabase. Revisa la conexión y la configuración.';
+            };
+            const saveSupabaseConfig = (event) => {
+                event.preventDefault();
+                try {
+                    const url = new URL(draftUrl.trim());
+                    const key = draftKey.trim();
+                    if (url.protocol !== 'https:' || !key || key.startsWith('sb_secret_')) throw new Error('Usa la URL HTTPS y solo la clave publishable o anon. Nunca uses una clave secret o service_role.');
+                    if (key.split('.').length === 3) {
+                        const payload = JSON.parse(atob(key.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+                        if (payload.role === 'service_role') throw new Error('La clave service_role es privada. Usa publishable o anon.');
+                    }
+                    localStorage.setItem('grafiplot_supabase_url', url.origin);
+                    localStorage.setItem('grafiplot_supabase_key', key);
+                    setSupabaseUrl(url.origin); setSupabaseKey(key); setCloudError('');
+                } catch (err) { setCloudError(err.message || 'URL o clave inválida.'); }
+            };
+            const changeSupabaseConfig = async () => {
+                try { await supabaseRef.current?.auth.signOut(); } catch (err) { console.error(err); }
+                localStorage.removeItem('grafiplot_supabase_url');
+                localStorage.removeItem('grafiplot_supabase_key');
+                setSupabaseUrl(''); setSupabaseKey(''); setDraftUrl(''); setDraftKey('');
+                setAuthUser(null); setPendingOrders([]); setCloudError('');
+            };
+            const logInCloud = async (event) => {
+                event.preventDefault(); setCloudError(''); setCloudBusy(true);
+                try {
+                    const {data, error} = await supabaseRef.current.auth.signInWithPassword({email:cloudEmail.trim(), password:cloudPassword});
+                    if (error) throw error;
+                    setCloudPassword('');
+                    await loadPending(data.user);
+                } catch (err) { setCloudError(describeCloudError(err)); }
+                finally { setCloudBusy(false); }
+            };
+            const loadPending = async (userOverride) => {
+                setPendingOpen(true);
+                if (!supabaseRef.current || !(userOverride?.id ? userOverride : authUser)) { setCloudError(''); return; }
+                setCloudError(''); setCloudBusy(true);
+                try {
+                    const {data, error} = await supabaseRef.current.from('pedidos_pendientes')
+                        .select('id,nombre,telefono,items,total,estado,guardado_en')
+                        .order('guardado_en', {ascending:false}).limit(200);
+                    if (error) throw error;
+                    setPendingOrders(data || []);
+                } catch (err) { setCloudError(describeCloudError(err)); }
+                finally { setCloudBusy(false); }
+            };
+            const pendingPayload = (client) => {
+                const activeItems = client.items.filter(item => item.quantities.some(q => evaluateExpression(q) > 0));
+                return {
+                    nombre:client.name.trim(), telefono:client.phone || '',
+                    items:activeItems.map(item => ({name:item.name, price:Number(item.price) || 0, quantities:item.quantities.filter(Boolean), isCustom:Boolean(item.isCustom)})),
+                    total:activeItems.reduce((sum,item) => sum + item.quantities.reduce((n,q) => n + evaluateExpression(q),0) * (Number(item.price) || 0),0)
+                };
+            };
+            const emptySlot = (id) => ({name:`CLIENTE ${id}`, phone:'', items:[{id:`item-${Date.now()}`, name:'A4', price:0.1, quantities:[''], isCustom:false}]});
+            const orderItems = (order) => (order.items || []).map((item,i) => ({
+                id:`recovered-${Date.now()}-${i}`, name:item.name || 'A4', price:Number(item.price) || 0,
+                quantities:[...(item.quantities || []), ''], isCustom:Boolean(item.isCustom)
+            }));
+            const canReplaceSlot = () => {
+                const current = clients.find(c => c.id === activeClientId);
+                return !current?.items.some(item => item.quantities.some(q => evaluateExpression(q) > 0)) || window.confirm('La pestaña actual contiene cantidades. ¿Reemplazarlas con esta cuenta?');
+            };
+            const editPendingOrder = (order) => {
+                if (!canReplaceSlot()) return;
+                setClients(prev => prev.map(c => c.id === activeClientId ? {...c, name:order.nombre || c.name, phone:order.telefono || '', items:orderItems(order)} : c));
+                setEditingPending({id:order.id, slotId:activeClientId, estado:order.estado});
+                setPendingOpen(false); setShowClientInfo(true);
+                setCloudNotice('Cuenta cargada para edición. Los cambios se guardan automáticamente en la pestaña y en su registro. Usa «Guardar cuenta editada» para liberar la pestaña.');
+            };
+            const savePending = async (client) => {
+                if (!supabaseRef.current || !authUser) { setPendingOpen(true); setCloudError(supabaseRef.current ? 'Inicia sesión con tu cuenta de Supabase para guardar cuentas.' : 'Configura la conexión con Supabase antes de guardar cuentas.'); return; }
+                if (!client.name.trim() || /^CLIENTE \d+$/i.test(client.name.trim())) { setShowClientInfo(true); setCloudError('Escribe el nombre del cliente antes de guardar.'); return; }
+                const payload = pendingPayload(client);
+                if (!payload.items.length) { setCloudError('Ingresa al menos una cantidad antes de guardar.'); return; }
+                setCloudError(''); setCloudNotice(''); setCloudBusy(true);
+                try {
+                    let error;
+                    if (editingPending?.slotId === client.id) {
+                        await pendingQueueRef.current;
+                        ({error} = await supabaseRef.current.from('pedidos_pendientes').update(payload)
+                            .eq('id', editingPending.id).eq('user_id', authUser.id));
+                    } else {
+                        ({error} = await supabaseRef.current.from('pedidos_pendientes').insert({...payload, user_id:authUser.id, estado:'pendiente'}));
+                    }
+                    if (error) throw error;
+                    setClients(prev => prev.map(c => c.id === client.id ? {...c, ...emptySlot(client.id)} : c));
+                    setEditingPending(null); setShowClientInfo(false);
+                    setCloudNotice('Cuenta guardada en Supabase. La pestaña quedó libre para el siguiente cliente.');
+                } catch (err) { setCloudError(describeCloudError(err)); }
+                finally { setCloudBusy(false); }
+            };
+            const recoverPending = async (order) => {
+                if (!canReplaceSlot()) return;
+                setCloudError(''); setCloudBusy(true);
+                try {
+                    if (editingPending?.id === order.id) await pendingQueueRef.current;
+                    const {data, error} = await supabaseRef.current.from('pedidos_pendientes')
+                        .update({estado:'recogido', recogido_en:new Date().toISOString()})
+                        .eq('id', order.id).eq('user_id', authUser.id).eq('estado','pendiente').select('id').single();
+                    if (error || !data) throw error || new Error('No se pudo marcar la cuenta como recogida.');
+                    setClients(prev => prev.map(c => c.id === activeClientId ? {...c, name:order.nombre || c.name, phone:order.telefono || '', items:orderItems(order)} : c));
+                    setPendingOrders(prev => prev.map(p => p.id === order.id ? {...p, estado:'recogido'} : p));
+                    setEditingPending(null); setPendingOpen(false); setShowClientInfo(false);
+                    setCloudNotice('Cuenta marcada como recogida. Se conserva en Supabase y está cargada en esta pestaña.');
+                } catch (err) { setCloudError(describeCloudError(err)); }
+                finally { setCloudBusy(false); }
+            };
+            const deletePending = async (order) => {
+                if (!window.confirm(`¿Eliminar definitivamente la cuenta de ${order.nombre}? Esta acción no se puede deshacer.`)) return;
+                if (editingPending?.id === order.id) setEditingPending(null);
+                setCloudError(''); setCloudBusy(true);
+                try {
+                    if (editingPending?.id === order.id) await pendingQueueRef.current;
+                    const {error} = await supabaseRef.current.from('pedidos_pendientes').delete()
+                        .eq('id',order.id).eq('user_id',authUser.id);
+                    if (error) throw error;
+                    setPendingOrders(prev => prev.filter(p => p.id !== order.id));
+                    if (editingPending?.id === order.id) {
+                        setClients(prev => prev.map(c => c.id === editingPending.slotId ? {...c, ...emptySlot(c.id)} : c));
+                        setEditingPending(null);
+                    }
+                    setCloudNotice('Cuenta eliminada de Supabase.');
+                } catch (err) { setCloudError(describeCloudError(err)); }
+                finally { setCloudBusy(false); }
+            };
+            const finishEditing = async (client) => {
+                if (!editingPending || editingPending.slotId !== client.id) return;
+                setCloudError(''); setCloudBusy(true);
+                try {
+                    await pendingQueueRef.current;
+                    const {error} = await supabaseRef.current.from('pedidos_pendientes')
+                        .update({...pendingPayload(client), estado:'recogido', recogido_en:new Date().toISOString()})
+                        .eq('id',editingPending.id).eq('user_id',authUser.id);
+                    if (error) throw error;
+                    setEditingPending(null);
+                    setCloudNotice('Cuenta actualizada y marcada como recogida. Se conserva en el historial.');
+                } catch (err) { setCloudError(describeCloudError(err)); }
+                finally { setCloudBusy(false); }
+            };
+
+            useEffect(() => {
+                if (!editingPending || !authUser?.id || !supabaseRef.current) return;
+                const client = clients.find(c => c.id === editingPending.slotId);
+                if (!client) return;
+                setPendingSyncStatus('saving');
+                const timer = setTimeout(() => {
+                    const payload = pendingPayload(client);
+                    const orderId = editingPending.id;
+                    const api = supabaseRef.current;
+                    pendingQueueRef.current = pendingQueueRef.current.catch(() => {}).then(async () => {
+                        const {error} = await api.from('pedidos_pendientes').update(payload)
+                            .eq('id',orderId).eq('user_id',authUser.id);
+                        if (error) throw error;
+                        setPendingSyncStatus('saved');
+                    }).catch(err => { setPendingSyncStatus('error'); setCloudError(describeCloudError(err)); });
+                }, 1000);
+                return () => clearTimeout(timer);
+            }, [clients, editingPending?.id, editingPending?.slotId, authUser?.id]);
+
+            const clientsRef = useRef(clients);
+            useEffect(() => {
+                clientsRef.current = clients;
+                localStorage.setItem('grafiplot_backup', JSON.stringify(clients));
+            }, [clients]);
+
+            useEffect(() => {
+                let cancelled = false;
+                const userId = authUser?.id;
+                saveSeqRef.current++;
+                setSyncReady(false);
+                if (!userId || !supabaseRef.current) { setSyncStatus('local'); return; }
+                setSyncStatus('loading');
+                const client = supabaseRef.current;
+                (async () => {
+                    try {
+                        const {data, error} = await client.from('grafiplot_estado').select('clientes').eq('user_id', userId).maybeSingle();
+                        if (error) throw error;
+                        if (cancelled) return;
+                        if (data?.clientes && Array.isArray(data.clientes) && data.clientes.length) {
+                            setClients(data.clientes.map((c,i) => ({...c, theme:CLIENT_THEMES[i % CLIENT_THEMES.length]})));
+                        } else {
+                            const {error:insertError} = await client.from('grafiplot_estado').upsert({user_id:userId, clientes:clientsRef.current, actualizado_en:new Date().toISOString()}, {onConflict:'user_id'});
+                            if (insertError) throw insertError;
+                        }
+                        if (!cancelled) { setSyncReady(true); setSyncStatus('saved'); }
+                    } catch (err) {
+                        if (!cancelled) { setSyncStatus('error'); setCloudError(describeCloudError(err)); }
+                    }
+                })();
+                return () => { cancelled = true; };
+            }, [authUser?.id]);
+
+            useEffect(() => {
+                if (!syncReady || !authUser?.id || !supabaseRef.current) return;
+                const currentSeq = ++saveSeqRef.current;
+                setSyncStatus('saving');
+                const timer = setTimeout(() => {
+                    const snapshot = clients;
+                    const userId = authUser.id;
+                    const client = supabaseRef.current;
+                    saveQueueRef.current = saveQueueRef.current.catch(() => {}).then(async () => {
+                        if (currentSeq !== saveSeqRef.current || !client) return;
+                        const {error} = await client.from('grafiplot_estado').upsert({user_id:userId, clientes:snapshot, actualizado_en:new Date().toISOString()}, {onConflict:'user_id'});
+                        if (error) throw error;
+                        if (currentSeq === saveSeqRef.current) setSyncStatus('saved');
+                    }).catch(err => {
+                        if (currentSeq === saveSeqRef.current) { setSyncStatus('error'); setCloudError(describeCloudError(err)); }
+                    });
+                }, 800);
+                return () => clearTimeout(timer);
+            }, [clients, syncReady, authUser?.id]);
+
+            const handleAddClient = () => {
+                const nextId = Math.max(0, ...clients.map(c => Number(c.id) || 0)) + 1;
+                const theme = CLIENT_THEMES[clients.length % CLIENT_THEMES.length];
+                setClients(prev => [...prev, {
+                    id:nextId, name:`CLIENTE ${nextId}`, theme, phone:'',
+                    items:[{id:`item-${Date.now()}-${nextId}`, name:'A4', price:0.1, quantities:[''], isCustom:false}]
+                }]);
+                setActiveClientId(nextId);
+                setShowClientInfo(false);
+            };
+
+            const handleUpdateClientName = (clientId, newName) => {
+                setClients(prev => prev.map(c => c.id === clientId ? { ...c, name: newName } : c));
+            };
+
+            const handleUpdateClientPhone = (clientId, newPhone) => {
+                setClients(prev => prev.map(c => c.id === clientId ? { ...c, phone: newPhone } : c));
+            };
+
+            const handleAddItem = (clientId) => {
+                const newItem = {
+                    id: `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                    name: 'A4',
+                    price: 0.1,
+                    quantities: [''],
+                    isCustom: false
+                };
+                setClients(prev => prev.map(c => c.id === clientId ? { ...c, items: [...c.items, newItem] } : c));
+            };
+
+            const handleUpdateItem = (clientId, itemId, field, value) => {
+                setClients(prev => prev.map(client => {
+                    if (client.id !== clientId) return client;
+                    return {
+                        ...client,
+                        items: client.items.map(item => {
+                            if (item.id !== itemId) return item;
+                            let updatedItem = { ...item, [field]: value };
+                            
+                            if (field === 'dropdownSelect') {
+                                if (value === 'OTRO') {
+                                    updatedItem = { ...updatedItem, name: '', price: 0, isCustom: true };
+                                } else {
+                                    const prod = PREDEFINED_PRODUCTS.find(p => p.id === value);
+                                    if (prod) {
+                                        updatedItem = { ...updatedItem, name: prod.name, price: prod.price, isCustom: false };
+                                    }
+                                }
+                            }
+                            return updatedItem;
+                        })
+                    };
+                }));
+            };
+
+            const handleQtyKeyDown = (clientId, itemId, index, e) => {
+                if (e.key === 'Backspace' && e.target.value === '' && index > 0) {
+                    e.preventDefault();
+                    const prevInput = document.getElementById(`qty-${clientId}-${itemId}-${index - 1}`);
+                    if (prevInput) prevInput.focus();
+                } else if (e.key === 'Delete' || e.key === 'Del') {
+                    e.preventDefault();
+                    setClients(prev => prev.map(client => {
+                        if (client.id !== clientId) return client;
+                        return {
+                            ...client,
+                            items: client.items.map(item => {
+                                if (item.id !== itemId) return item;
+                                const newQuantities = [...item.quantities];
+                                newQuantities[index] = '';
+                                if (newQuantities.length > 1 && newQuantities[newQuantities.length - 1] === '' && newQuantities[newQuantities.length - 2] === '') {
+                                    newQuantities.pop();
+                                }
+                                return { ...item, quantities: newQuantities };
+                            })
+                        };
+                    }));
+                } else if (e.key === 'ArrowRight') {
+                    if (e.target.selectionStart === e.target.value.length) {
+                        e.preventDefault();
+                        const nextInput = document.getElementById(`qty-${clientId}-${itemId}-${index + 1}`);
+                        if (nextInput) nextInput.focus();
+                    }
+                } else if (e.key === 'ArrowLeft') {
+                    if (e.target.selectionEnd === 0 && index > 0) {
+                        e.preventDefault();
+                        const prevInput = document.getElementById(`qty-${clientId}-${itemId}-${index - 1}`);
+                        if (prevInput) prevInput.focus();
+                    }
+                }
+            };
+
+            const handleDeleteItem = (clientId, itemId) => {
+                setClients(prev => prev.map(c => c.id === clientId ? { ...c, items: c.items.filter(item => item.id !== itemId) } : c));
+            };
+
+            const handleClearClientData = (clientId) => {
+                setClients(prev => prev.map(c => c.id === clientId ? { ...c, items: c.items.map(item => ({ ...item, quantities: [''] })) } : c));
+            };
+
+            const generatePDF = async (client) => {
+                setPdfLoading(true);
+                const element = document.getElementById('receipt-print-area');
+                const lines = client.items.filter(item => item.quantities.some(q => evaluateExpression(q) > 0)).length;
+                const opt = {
+                    margin: 2,
+                    filename: `Boleta_${client.name.trim().replace(/\s+/g, '_')}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true },
+                    jsPDF: { unit: 'mm', format: [80, Math.max(200, 95 + lines * 14)], orientation: 'portrait' }
+                };
+
+                try {
+                    const worker = html2pdf().from(element).set(opt);
+                    await worker.save();
+                } catch (err) {
+                    console.error("Error PDF", err);
+                } finally {
+                    setPdfLoading(false);
+                }
+            };
+
+            const handleWhatsApp = async () => {
+                if (!activeReceipt) return;
+                const client = clients.find(c => c.id === activeReceipt);
+                if (!client) return;
+
+                setPdfLoading(true);
+                try {
+                    const element = document.getElementById('receipt-print-area');
+                    const filename = `Boleta_${client.name.trim().replace(/\s+/g, '_')}.pdf`;
+                    
+                    const total = client.items.reduce((sum, item) => {
+                        const itemQty = item.quantities.reduce((acc, q) => acc + (evaluateExpression(q) || 0), 0);
+                        return sum + (itemQty * (parseFloat(item.price) || 0));
+                    }, 0);
+
+                    const texto = `Hola, te envío el detalle de tu cuenta en Grafiplot:\n\n👤 Cliente: ${client.name}\n💰 Total a pagar: S/ ${total.toFixed(2)}\n\n*Adjunto boleta digital.* ¡Gracias por tu preferencia!`;
+
+                    const opt = {
+                        margin: 2,
+                        filename: filename,
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { scale: 2, useCORS: true },
+                        jsPDF: { unit: 'mm', format: [80, Math.max(200, 95 + client.items.filter(item => item.quantities.some(q => evaluateExpression(q) > 0)).length * 14)], orientation: 'portrait' }
+                    };
+
+                    const worker = html2pdf().from(element).set(opt);
+                    const pdfBlob = await worker.output('blob');
+                    const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
+
+                    if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+                        await navigator.share({
+                            title: `Boleta - ${client.name}`,
+                            text: texto,
+                            files: [pdfFile]
+                        });
+                    } else {
+                        await generatePDF(client);
+                        const textoEncoded = encodeURIComponent(texto);
+                        const digits = (client.phone || '').replace(/\D/g, '');
+                        const numeroDestino = digits ? (digits.startsWith('51') ? digits : `51${digits}`) : '';
+                        window.open(`https://wa.me/${numeroDestino}?text=${textoEncoded}`, '_blank', 'noopener,noreferrer');
+                        alert("✅ Se descargó automáticamente la boleta en PDF.\n\n📌 En la pantalla de WhatsApp, toca el botón de adjuntar (📎) y selecciona la boleta descargada.");
+                    }
+                } catch (err) {
+                    console.error("Error al enviar WhatsApp con PDF", err);
+                } finally {
+                    setPdfLoading(false);
+                }
+            };
+
+            const downloadJSON = (data, filename) => {
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+            };
+
+            const exportDebt = () => {
+                const client = clients.find(c => c.id === activeClientId);
+                if (!client) return;
+                const productos = client.items.map(item => {
+                    const cantidad = item.quantities.reduce((sum, q) => sum + evaluateExpression(q), 0);
+                    const precio = parseFloat(item.price) || 0;
+                    return { tamano: item.name, cantidad_total: cantidad, precio_unitario: precio, subtotal: cantidad * precio };
+                }).filter(p => p.cantidad_total > 0);
+                const data = {
+                    contacto: client.name.trim() || `Cliente_${client.id}`,
+                    telefono: client.phone || '',
+                    total_deuda: productos.reduce((sum, p) => sum + p.subtotal, 0),
+                    productos
+                };
+                downloadJSON(data, `Deuda_${data.contacto.replace(/[^a-z0-9_-]/gi, '_')}.json`);
+            };
+
+            const restoreFile = (event) => {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try {
+                        const json = JSON.parse(ev.target.result);
+                        if (Array.isArray(json) && json.length > 1 && json.every(c => c && Array.isArray(c.items))) {
+                            setClients(json.map((c, i) => ({ ...c, theme: CLIENT_THEMES[i % CLIENT_THEMES.length] })));
+                            setActiveClientId(json[0].id);
+                            alert('Copia general restaurada correctamente.');
+                        } else if (json && json.total_deuda !== undefined && json.contacto && Array.isArray(json.productos)) {
+                            const items = json.productos.map((p, i) => ({
+                                id: `restored-${Date.now()}-${i}`,
+                                name: p.tamano || p.nombre || 'A4',
+                                price: p.precio_unitario ?? 0,
+                                quantities: [String(p.cantidad_total ?? p.total_cantidad ?? (Array.isArray(p.cantidades) ? p.cantidades.reduce((s, q) => s + evaluateExpression(q), 0) : 0)), ''],
+                                isCustom: !PREDEFINED_PRODUCTS.some(prod => prod.name === (p.tamano || p.nombre))
+                            }));
+                            setClients(prev => prev.map(c => c.id === activeClientId ? {
+                                ...c, name: json.contacto, phone: json.telefono || '',
+                                items: items.length ? items : [{ id: `item-${Date.now()}`, name:'A4', price:0.1, quantities:[''], isCustom:false }]
+                            } : c));
+                            alert('Deuda cargada en el cliente actual.');
+                        } else {
+                            const clientData = Array.isArray(json) ? json[0] : json;
+                            if (!clientData || !Array.isArray(clientData.items)) throw new Error('Formato inválido');
+                            setClients(prev => prev.map(c => c.id === activeClientId ? { ...clientData, id:c.id, theme:c.theme } : c));
+                            alert('Cliente restaurado correctamente.');
+                        }
+                    } catch (err) { alert('No se pudo abrir el archivo. Revisa que sea una copia JSON válida.'); }
+                };
+                reader.readAsText(file);
+                event.target.value = '';
+            };
+
+            const ReceiptModal = () => {
+                if (!activeReceipt) return null;
+                const client = clients.find(c => c.id === activeReceipt);
+                if (!client) return null;
+
+                const activeItems = client.items.filter(item => {
+                    const totalQty = item.quantities.reduce((acc, q) => acc + (evaluateExpression(q) || 0), 0);
+                    return totalQty > 0;
+                });
+
+                const totalPagar = activeItems.reduce((sum, item) => {
+                    const totalQty = item.quantities.reduce((acc, q) => acc + (evaluateExpression(q) || 0), 0);
+                    return sum + (totalQty * (parseFloat(item.price) || 0));
+                }, 0);
+
+                return (
+                    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={`Boleta de ${client.name}`}>
+                        <div className="receipt-modal">
+                            <div className="receipt-modal-head">
+                                <h3>Boleta digital · {client.name}</h3>
+                                <button onClick={() => setActiveReceipt(null)} className="icon-btn" style={{color:'white'}} aria-label="Cerrar boleta"><Icon name="close"/></button>
+                            </div>
+
+                            <div className="receipt-preview">
+                                <div id="receipt-print-area" className="bg-white p-4 shadow w-[76mm] min-h-[90mm] text-black font-mono text-xs">
+                                    <div className="text-center mb-3">
+                                        <h1 className="font-bold text-lg leading-tight">GRAFIPLOT</h1>
+                                        <p className="text-[10px]">RUC: 10712451284</p>
+                                        <p className="text-[10px]">CEL: 952628844</p>
+                                        <p className="text-[9px] leading-tight">AV UNIVERSITARIA 606 CAYHUYNA<br/>FRENTE A LA UNHEVAL</p>
+                                    </div>
+
+                                    <div className="border-t border-dashed border-gray-400 my-2"></div>
+
+                                    <div className="mb-2 text-[11px]">
+                                        <p><strong>CLIENTE:</strong> {client.name.toUpperCase()}</p>
+                                        <p><strong>FECHA:</strong> {new Date().toLocaleDateString()} {new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                                    </div>
+
+                                    <div className="border-t border-dashed border-gray-400 my-2"></div>
+
+                                    <table className="w-full text-left text-[11px] mb-2">
+                                        <thead>
+                                            <tr className="border-b border-gray-300">
+                                                <th className="pb-1 w-8">CANT</th>
+                                                <th className="pb-1">DESCRIPCIÓN</th>
+                                                <th className="pb-1 text-right">P.U.</th>
+                                                <th className="pb-1 text-right">TOTAL</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {activeItems.length > 0 ? activeItems.map((item, idx) => {
+                                                const qty = item.quantities.reduce((acc, q) => acc + (evaluateExpression(q) || 0), 0);
+                                                const pr = parseFloat(item.price) || 0;
+                                                return (
+                                                    <tr key={idx}>
+                                                        <td className="py-1 align-top font-bold">{qty}</td>
+                                                        <td className="py-1 align-top pr-1">{item.name}</td>
+                                                        <td className="py-1 align-top text-right">S/ {pr.toFixed(2)}</td>
+                                                        <td className="py-1 align-top text-right font-bold">S/ {(qty * pr).toFixed(2)}</td>
+                                                    </tr>
+                                                );
+                                            }) : (
+                                                <tr>
+                                                    <td colSpan="4" className="py-3 text-center text-gray-400 italic">Sin productos ingresados</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+
+                                    <div className="border-t border-dashed border-gray-400 my-2"></div>
+
+                                    <div className="flex justify-between font-bold text-sm my-2 bg-gray-100 p-1 rounded">
+                                        <span>TOTAL A PAGAR:</span>
+                                        <span>S/ {totalPagar.toFixed(2)}</span>
+                                    </div>
+
+                                    <div className="border-t border-dashed border-gray-400 my-2"></div>
+
+                                    <div className="text-center mt-3 text-[9px] text-gray-600">
+                                        <p>¡GRACIAS POR SU PREFERENCIA!</p>
+                                        <p className="mt-0.5">Vuelva pronto a Grafiplot.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="receipt-actions">
+                                <button 
+                                    onClick={handleWhatsApp}
+                                    disabled={pdfLoading || activeItems.length === 0}
+                                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-sm shadow flex items-center justify-center gap-2"
+                                >
+                                    💬 ENVIAR A WHATSAPP
+                                </button>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => generatePDF(client)}
+                                        disabled={pdfLoading || activeItems.length === 0}
+                                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow flex items-center justify-center gap-1"
+                                    >
+                                        📄 DESCARGAR PDF
+                                    </button>
+                                    <button 
+                                        onClick={() => setActiveReceipt(null)}
+                                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-xs font-bold hover:bg-gray-100"
+                                    >
+                                        CERRAR
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="app-shell">
+                    <aside className="sidebar">
+                        <div className="brand"><span className="brand-mark"><Icon name="layers" size={22}/></span><div><div className="brand-name">grafiplot<span style={{color:'#6ea6ff'}}>.</span></div><div className="brand-sub">GESTIÓN DE PEDIDOS</div></div></div>
+                        <nav aria-label="Clientes"><p className="side-label">Clientes · {clients.length}</p><div className="side-nav">{clients.map((c, i) => <button key={c.id} type="button" onClick={() => setActiveClientId(c.id)} className={`side-client ${activeClientId === c.id ? 'active' : ''}`} style={{'--accent':['#64a2ff','#54ca9d','#ff7588','#e9bd58','#b49af7','#f6a260'][i % 6]}} aria-current={activeClientId === c.id ? 'page' : undefined}><span className="client-dot"/><span>{c.name || `CLIENTE ${i + 1}`}</span><small>{String(i + 1).padStart(2,'0')}</small></button>)}</div><button type="button" className="side-add" onClick={handleAddClient}><Icon name="plus"/> Añadir cliente</button></nav>
+                        <div className="side-foot"><strong>Tu espacio de trabajo</strong>Las pestañas se sincronizan con Supabase al iniciar sesión. También se conserva una copia local.</div>
+                    </aside>
+                    <main className="main">
+                        {showOverview && <header className="topbar"><div className="breadcrumbs"><span>Panel de control</span><span>›</span><strong>Pedidos</strong></div><div className="top-actions">
+                            <button type="button" onClick={exportDebt} className="btn btn-soft" title="Exportar la deuda del cliente actual"><Icon name="download"/> Exportar deuda</button>
+                            <button type="button" onClick={() => downloadJSON(clients, 'Grafiplot_Backup_General.json')} className="btn"><Icon name="download"/> Copia general</button>
+                            <label className="btn" title="Restaurar archivo JSON"><Icon name="upload"/> Restaurar<input className="restore-input" type="file" accept=".json,application/json" onChange={restoreFile}/></label>
+                        </div></header>}
+                        <div className="content">
+                            {showOverview && <div className="page-heading"><div><p className="eyebrow">Panel de ventas</p><h1>Gestión de pedidos</h1><p className="subtitle">Organiza productos, cantidades y boletas en un solo lugar.</p></div><div className="heading-actions"><button type="button" className="btn" onClick={() => setShowOverview(v => !v)} aria-expanded={showOverview} aria-controls="overview-panel">{showOverview ? 'Ocultar resumen y cliente' : 'Mostrar resumen y cliente'}</button><div className="save-state" role="status"><span style={{background:syncStatus === 'error' ? '#e35b66' : syncStatus === 'loading' || syncStatus === 'saving' ? '#e8ae42' : '#37be8b'}}/> {syncStatus === 'loading' ? 'Recuperando de Supabase…' : syncStatus === 'saving' ? 'Guardando en Supabase…' : syncStatus === 'saved' ? 'Sincronizado con Supabase' : syncStatus === 'error' ? 'Error de sincronización' : 'Guardado local · inicia sesión para sincronizar'}</div></div></div>}
+                            <nav className="mobile-tabs" aria-label="Clientes">{clients.map((c, i) => <button key={c.id} type="button" className={`mobile-tab ${activeClientId === c.id ? 'active' : ''}`} onClick={() => setActiveClientId(c.id)}>{c.name || `CLIENTE ${i + 1}`}</button>)}<button type="button" className="mobile-tab" onClick={handleAddClient}>+ Añadir cliente</button></nav>
+                            {clients.filter(c => c.id === activeClientId).map(client => {
+                                const qtys = client.items.map(item => item.quantities.reduce((sum, q) => sum + evaluateExpression(q), 0));
+                                const total = client.items.reduce((sum, item, i) => sum + qtys[i] * (parseFloat(item.price) || 0), 0);
+                                const active = qtys.filter(q => q > 0).length;
+                                return <section key={client.id} aria-label={`Pedido de ${client.name}`}>
+                                    {!showOverview && <div className="compact-bar">
+                                        <button type="button" className="btn" onClick={() => setShowOverview(true)} aria-expanded="false" aria-controls="overview-panel">Mostrar panel y datos del cliente</button>
+                                        <div className="compact-right"><div className="compact-total">Total del pedido <strong>S/ {total.toFixed(2)}</strong></div><div className="save-state" role="status"><span style={{background:syncStatus === 'error' ? '#e35b66' : syncStatus === 'saving' || syncStatus === 'loading' ? '#e8ae42' : '#37be8b'}}/>{syncStatus === 'saved' ? 'Sincronizado' : syncStatus === 'saving' ? 'Guardando…' : syncStatus === 'loading' ? 'Recuperando…' : syncStatus === 'error' ? 'Error de sincronización' : 'Guardado local'}</div></div>
+                                    </div>}
+                                    {cloudNotice && <p className="cloud-notice" role="status">{cloudNotice}</p>}
+                                    {cloudError && !pendingOpen && <p className="cloud-error" role="alert" style={{marginBottom:16}}>{cloudError}</p>}
+                                    {showOverview && <div id="overview-panel">
+                                    <div className="summary-grid"><div className="summary-card total"><div className="summary-label">Total del pedido</div><div className="summary-value">S/ {total.toFixed(2)}</div><div className="summary-note">Calculado en tiempo real</div></div><div className="summary-card"><div className="summary-label">Productos activos</div><div className="summary-value">{active}</div><div className="summary-note">Con cantidades registradas</div></div><div className="summary-card"><div className="summary-label">Unidades registradas</div><div className="summary-value">{qtys.reduce((sum, q) => sum + q, 0)}</div><div className="summary-note">Cantidad acumulada</div></div></div>
+                                    <div className="panel">
+                                        <div className="panel-head"><div><h2 className="panel-title">Información del cliente</h2><p className="panel-desc">Nombre y teléfono para pedidos pendientes y boletas</p></div><button type="button" className="client-toggle" onClick={() => setShowClientInfo(v => !v)} aria-expanded={showClientInfo}>{showClientInfo ? 'Ocultar datos' : 'Mostrar datos'}</button></div>
+                                        {showClientInfo && <div className="panel-body field-grid"><label><span className="field-label">Nombre del cliente</span><input className="text-input" type="text" value={client.name} onChange={e => handleUpdateClientName(client.id, e.target.value)} placeholder="Nombre o referencia"/></label><label><span className="field-label">Número de WhatsApp</span><input className="text-input" type="tel" value={client.phone || ''} onChange={e => handleUpdateClientPhone(client.id, e.target.value)} placeholder="Ej. 999 999 999"/></label></div>}
+                                    </div>
+                                    <div className="panel action-panel cloud-panel"><div><h3>{editingPending?.slotId === client.id ? 'Editando cuenta guardada' : 'Cuentas de clientes'}</h3><p className="cloud-status">{authUser ? `Solo tú: ${authUser.email} · ${editingPending?.slotId === client.id ? (pendingSyncStatus === 'saving' ? 'guardando cuenta…' : pendingSyncStatus === 'error' ? 'error al guardar cuenta' : 'cuenta sincronizada') : (syncStatus === 'error' ? 'sincronización pendiente: revisa SQL' : syncStatus === 'loading' ? 'recuperando pestañas…' : 'pestañas sincronizadas')}` : 'Inicia sesión una vez para sincronizar todas las pestañas.'}</p></div><div className="cloud-actions"><button type="button" className="btn" onClick={loadPending}><Icon name="layers"/> Ver cuentas guardadas</button><button type="button" className="btn btn-primary" disabled={cloudBusy} onClick={() => savePending(client)}><Icon name="upload"/> {editingPending?.slotId === client.id ? 'Guardar cuenta editada' : 'Guardar cuenta pendiente'}</button>{editingPending?.slotId === client.id && <button type="button" className="btn" disabled={cloudBusy} onClick={() => finishEditing(client)}>Guardar y marcar recogido</button>}</div></div>
+                                    </div>}
+                                    <div className="panel items-panel"><div className="panel-head"><div><h2 className="panel-title">Detalle de productos</h2><p className="panel-desc">Puedes usar operaciones en las cantidades, por ejemplo 2+3</p></div><span className="save-state">{client.items.length} {client.items.length === 1 ? 'fila' : 'filas'}</span></div>
+                                        <div className="table-wrap"><table className="items-table"><thead><tr><th>Producto</th><th>Precio unitario</th><th>Cantidades</th><th>Subtotal</th><th>Acción</th></tr></thead><tbody>{client.items.map(item => {
+                                            const qty = item.quantities.reduce((sum, q) => sum + evaluateExpression(q), 0);
+                                            const subtotal = qty * (parseFloat(item.price) || 0);
+                                            const selected = PREDEFINED_PRODUCTS.find(p => p.name === item.name);
+                                            return <tr key={item.id}>
+                                                <td>{!item.isCustom ? <select className="product-select" aria-label="Producto" value={selected ? selected.id : 'a4'} onChange={e => handleUpdateItem(client.id, item.id, 'dropdownSelect', e.target.value)}>{PREDEFINED_PRODUCTS.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}<option value="OTRO">Otro producto…</option></select> : <div className="custom-product"><input className="text-input" type="text" aria-label="Nombre del producto" value={item.name} onChange={e => handleUpdateItem(client.id, item.id, 'name', e.target.value.toUpperCase())} placeholder="Nombre del producto"/><button className="icon-btn" type="button" onClick={() => handleUpdateItem(client.id, item.id, 'dropdownSelect', 'a4')} title="Volver a A4"><Icon name="close"/></button></div>}</td>
+                                                <td><input className="price-input" type="number" min="0" step="0.01" aria-label={`Precio de ${item.name}`} value={item.price} onChange={e => handleUpdateItem(client.id, item.id, 'price', e.target.value)}/></td>
+                                                <td><div className="qty-list">{item.quantities.map((q, idx) => <input key={idx} id={`qty-${client.id}-${item.id}-${idx}`} className="qty-input" type="text" inputMode="decimal" aria-label={`Cantidad ${idx + 1} de ${item.name}`} value={q} placeholder="+" onChange={e => {
+                                                    const val = e.target.value; if (!/^[0-9+\-*/.]*$/.test(val)) return;
+                                                    setClients(prev => prev.map(c => c.id === client.id ? {...c, items:c.items.map(it => { if (it.id !== item.id) return it; const next = [...it.quantities]; next[idx] = val; if (idx === next.length - 1 && val !== '') next.push(''); return {...it, quantities:next}; })} : c));
+                                                }} onKeyDown={e => handleQtyKeyDown(client.id, item.id, idx, e)}/>)}</div></td>
+                                                <td className={`row-total ${qty ? '' : 'empty'}`}>{qty ? `S/ ${subtotal.toFixed(2)}` : '—'}</td><td><button type="button" className="icon-btn" onClick={() => handleDeleteItem(client.id, item.id)} title="Eliminar producto" aria-label={`Eliminar ${item.name}`}><Icon name="trash"/></button></td>
+                                            </tr>;
+                                        })}</tbody></table></div><div className="product-footer"><button type="button" className="btn btn-soft" onClick={() => handleAddItem(client.id)}><Icon name="plus"/> Agregar producto</button><p className="product-hint">Los subtotales se actualizan al escribir cada cantidad.</p></div>
+                                    </div>
+                                    <div className="panel action-panel"><div><h3>Pedido listo para entregar</h3><p>Revisa el resumen y genera la boleta digital.</p></div><div className="action-buttons"><button type="button" className="btn btn-danger" onClick={() => handleClearClientData(client.id)}>Limpiar cantidades</button><button type="button" className="btn btn-primary" onClick={() => setActiveReceipt(client.id)}><Icon name="receipt"/> Generar boleta</button></div></div>
+                                </section>;
+                            })}
+                        </div>
+                    </main>
+                    <ReceiptModal/>
+                    {pendingOpen && <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Pedidos pendientes"><div className="receipt-modal pending-modal">
+                        <div className="receipt-modal-head"><h3>Pedidos pendientes de recojo</h3><button type="button" className="icon-btn" style={{color:'white'}} onClick={() => { setPendingOpen(false); setCloudError(''); }} aria-label="Cerrar"><Icon name="close"/></button></div>
+                        {!supabaseUrl || !supabaseKey ? <form className="cloud-login" onSubmit={saveSupabaseConfig}>
+                            <p>Pega la URL del proyecto y su clave pública desde Supabase → Project Settings → API Keys. Esta configuración se guarda solo en este navegador.</p>
+                            <label><span className="field-label">URL del proyecto</span><input className="text-input" type="url" required value={draftUrl} onChange={e => setDraftUrl(e.target.value)} placeholder="https://tu-proyecto.supabase.co"/></label>
+                            <label><span className="field-label">Clave publishable (o anon)</span><input className="text-input" type="text" required value={draftKey} onChange={e => setDraftKey(e.target.value)} placeholder="sb_publishable_..." autoComplete="off"/></label>
+                            {cloudError && <p className="cloud-error" role="alert">{cloudError}</p>}
+                            <button type="submit" className="btn btn-primary">Guardar conexión</button>
+                        </form> : !cloudReady ? <div className="cloud-login"><p>Conectando con Supabase… Revisa tu conexión a Internet si esto permanece en pantalla.</p><button type="button" className="btn" onClick={changeSupabaseConfig}>Cambiar conexión</button></div> : !authUser ? <form className="cloud-login" onSubmit={logInCloud}>
+                            <p>Inicia sesión con una cuenta creada en Supabase Auth. La aplicación es solo para ti; tus pestañas y cuentas se sincronizarán automáticamente.</p>
+                            <label><span className="field-label">Correo electrónico</span><input className="text-input" type="email" required value={cloudEmail} onChange={e => setCloudEmail(e.target.value)} autoComplete="username"/></label>
+                            <label><span className="field-label">Contraseña</span><input className="text-input" type="password" required value={cloudPassword} onChange={e => setCloudPassword(e.target.value)} autoComplete="current-password"/></label>
+                            {cloudError && <p className="cloud-error" role="alert">{cloudError}</p>}
+                            <button type="submit" className="btn btn-primary" disabled={cloudBusy}>Iniciar sesión</button>
+                            <button type="button" className="btn" onClick={changeSupabaseConfig}>Cambiar conexión</button>
+                        </form> : <>
+                            <div className="pending-list">
+                                {cloudError && <p className="cloud-error" role="alert">{cloudError}</p>}
+                                {cloudBusy && <p className="pending-empty">Procesando…</p>}
+                                {!cloudBusy && pendingOrders.filter(order => showCollected || order.estado === 'pendiente').length === 0 && <p className="pending-empty">No hay cuentas en esta vista. Puedes guardar una desde la pestaña activa.</p>}
+                                <div style={{display:'flex',gap:8,alignItems:'center',fontSize:12,color:'#64748c'}}><label><input type="checkbox" checked={showCollected} onChange={e => setShowCollected(e.target.checked)}/> Mostrar también recogidos</label></div>
+                                {pendingOrders.filter(order => showCollected || order.estado === 'pendiente').map(order => <div className="pending-card" key={order.id}>
+                                    <div className="pending-card-head"><strong>{order.nombre}</strong><strong>S/ {Number(order.total || 0).toFixed(2)}</strong></div>
+                                    <p>{order.estado === 'recogido' ? 'Recogido · ' : 'Pendiente · '}{order.telefono || 'Sin teléfono'} · {(order.items || []).length} productos · {order.guardado_en ? new Date(order.guardado_en).toLocaleString('es-PE') : 'Guardado recientemente'}</p>
+                                    <div className="pending-card-actions" style={{flexWrap:'wrap'}}>
+                                        <button type="button" className="btn" disabled={cloudBusy} onClick={() => editPendingOrder(order)}>Editar en pestaña</button>
+                                        {order.estado === 'pendiente' && <button type="button" className="btn btn-primary" disabled={cloudBusy} onClick={() => recoverPending(order)}>Recuperar y marcar recogido</button>}
+                                        <button type="button" className="btn btn-danger" disabled={cloudBusy} onClick={() => deletePending(order)}>Eliminar cuenta</button>
+                                    </div>
+                                </div>)}
+                            </div>
+                            <div className="receipt-actions" style={{borderTop:'1px solid #e5eaf0',display:'flex',justifyContent:'space-between',flexWrap:'wrap'}}><button type="button" className="btn" disabled={cloudBusy} onClick={loadPending}>Actualizar lista</button><button type="button" className="btn" onClick={() => supabaseRef.current.auth.signOut()}>Cerrar sesión</button><button type="button" className="btn" onClick={changeSupabaseConfig}>Cambiar conexión</button></div>
+                        </>}
+                    </div></div>}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
