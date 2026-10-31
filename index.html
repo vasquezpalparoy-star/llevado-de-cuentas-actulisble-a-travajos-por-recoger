@@ -247,6 +247,10 @@
             const [cloudEmail, setCloudEmail] = useState('');
             const [cloudPassword, setCloudPassword] = useState('');
             const [pendingOpen, setPendingOpen] = useState(false);
+            const [slotQrCodes, setSlotQrCodes] = useState({});
+            const [qrReceiverEnabled, setQrReceiverEnabled] = useState(true);
+            const [qrPcStatus, setQrPcStatus] = useState('Inicia sesión para recibir QR del celular.');
+            const qrListeningSince = useRef(new Date().toISOString());
             const [pendingOrders, setPendingOrders] = useState([]);
             const [cloudBusy, setCloudBusy] = useState(false);
             const [cloudError, setCloudError] = useState('');
@@ -343,9 +347,63 @@
                 return () => { cancelled = true; clearInterval(timer); };
             }, [pendingOpen, authUser?.id]);
 
+            useEffect(() => {
+                if (!qrReceiverEnabled || !authUser?.id || !supabaseRef.current) return;
+                let cancelled = false, busy = false;
+                const api = supabaseRef.current;
+                setQrPcStatus('Esperando QR del celular…');
+                const poll = async () => {
+                    if (busy || document.hidden) return;
+                    busy = true;
+                    try {
+                        const {data:events, error} = await api.from('grafiplot_qr_lecturas')
+                            .select('id,codigo').eq('user_id', authUser.id).is('consumido_en', null)
+                            .gte('leido_en', qrListeningSince.current)
+                            .order('leido_en', {ascending:false}).limit(1);
+                        if (error) throw error;
+                        if (cancelled || !events?.length) return;
+                        const event = events[0];
+                        const {data:claimed, error:claimError} = await api.from('grafiplot_qr_lecturas')
+                            .update({consumido_en:new Date().toISOString()}).eq('id',event.id)
+                            .eq('user_id',authUser.id).is('consumido_en',null).select('id');
+                        if (claimError) throw claimError;
+                        if (cancelled || !claimed?.length) return;
+                        const {data:order, error:orderError} = await api.from('pedidos_pendientes')
+                            .select('id,nombre,telefono,items,total,estado,guardado_en,codigo')
+                            .eq('user_id',authUser.id).eq('estado','pendiente').eq('codigo',event.codigo).maybeSingle();
+                        if (orderError) throw orderError;
+                        if (cancelled) return;
+                        const slot = clientsRef.current.find(c => c.id === activeClientId);
+                        const hasContent = slot?.items.some(item => item.quantities.some(q => evaluateExpression(q) > 0));
+                        if (hasContent && !window.confirm('Se leyó el QR ' + event.codigo + '. La pestaña actual contiene datos. ¿Reemplazarla para abrir esta cuenta?')) {
+                            setQrPcStatus('QR ' + event.codigo + ': apertura cancelada.'); return;
+                        }
+                        setSlotQrCodes(prev => ({...prev,[activeClientId]:event.codigo}));
+                        if (order) {
+                            setClients(prev => prev.map(c => c.id === activeClientId ? {...c,name:order.nombre || c.name,phone:order.telefono || '',items:orderItems(order)} : c));
+                            setEditingPending({id:order.id,slotId:activeClientId,estado:order.estado});
+                            setQrPcStatus('QR ' + event.codigo + ': cuenta abierta para editar.');
+                        } else {
+                            setClients(prev => prev.map(c => c.id === activeClientId ? {...c,...emptySlot(c.id)} : c));
+                            setEditingPending(null);
+                            setQrPcStatus('QR ' + event.codigo + ' libre: completa los datos y guarda la cuenta pendiente.');
+                        }
+                        setPendingOpen(false); setShowClientInfo(true); setShowOverview(true);
+                        setCloudNotice('Código QR asignado a esta pestaña: ' + event.codigo);
+                        window.scrollTo({top:0,behavior:'smooth'});
+                    } catch (error) {
+                        if (!cancelled) setQrPcStatus('No se pudo recibir QR: ' + describeCloudError(error));
+                    } finally { busy = false; }
+                };
+                poll();
+                const timer = setInterval(poll, 2000);
+                return () => { cancelled = true; clearInterval(timer); };
+            }, [authUser?.id, activeClientId, qrReceiverEnabled]);
+
             const pendingPayload = (client) => {
                 const activeItems = client.items.filter(item => item.quantities.some(q => evaluateExpression(q) > 0));
                 return {
+                    ...(slotQrCodes[client.id] ? {codigo:slotQrCodes[client.id]} : {}),
                     nombre:client.name.trim(), telefono:client.phone || '',
                     items:activeItems.map(item => ({name:item.name, price:Number(item.price) || 0, quantities:item.quantities.filter(Boolean), isCustom:Boolean(item.isCustom)})),
                     total:activeItems.reduce((sum,item) => sum + item.quantities.reduce((n,q) => n + evaluateExpression(q),0) * (Number(item.price) || 0),0)
@@ -895,7 +953,7 @@
                                         <div className="panel-head"><div><h2 className="panel-title">Información del cliente</h2><p className="panel-desc">Nombre y teléfono para pedidos pendientes y boletas</p></div><button type="button" className="client-toggle" onClick={() => setShowClientInfo(v => !v)} aria-expanded={showClientInfo}>{showClientInfo ? 'Ocultar datos' : 'Mostrar datos'}</button></div>
                                         {showClientInfo && <div className="panel-body field-grid"><label><span className="field-label">Nombre del cliente</span><input className="text-input" type="text" value={client.name} onChange={e => handleUpdateClientName(client.id, e.target.value)} placeholder="Nombre o referencia"/></label><label><span className="field-label">Número de WhatsApp</span><input className="text-input" type="tel" value={client.phone || ''} onChange={e => handleUpdateClientPhone(client.id, e.target.value)} placeholder="Ej. 999 999 999"/></label></div>}
                                     </div>
-                                    <div className="panel action-panel cloud-panel"><div><h3>{editingPending?.slotId === client.id ? 'Editando cuenta guardada' : 'Cuentas de clientes'}</h3><p className="cloud-status">{authUser ? `Solo tú: ${authUser.email} · ${editingPending?.slotId === client.id ? (pendingSyncStatus === 'saving' ? 'guardando cuenta…' : pendingSyncStatus === 'error' ? 'error al guardar cuenta' : 'cuenta sincronizada') : (syncStatus === 'error' ? 'sincronización pendiente: revisa SQL' : syncStatus === 'loading' ? 'recuperando pestañas…' : 'pestañas sincronizadas')}` : 'Inicia sesión una vez para sincronizar todas las pestañas.'}</p></div><div className="cloud-actions"><a className="btn" href="https://vasquezpalparoy-star.github.io/travajos-por-entregar-nuebo-junto-al-cuanta-por-llevar/" target="_blank" rel="noopener noreferrer">Trabajos QR / celular</a><button type="button" className="btn" onClick={loadPending}><Icon name="layers"/> Ver cuentas guardadas</button><button type="button" className="btn btn-primary" disabled={cloudBusy} onClick={() => savePending(client)}><Icon name="upload"/> {editingPending?.slotId === client.id ? 'Guardar cuenta editada' : 'Guardar cuenta pendiente'}</button>{editingPending?.slotId === client.id && <button type="button" className="btn" disabled={cloudBusy} onClick={() => finishEditing(client)}>Guardar y marcar recogido</button>}</div></div>
+                                    <div className="panel action-panel cloud-panel"><div><h3>{editingPending?.slotId === client.id ? 'Editando cuenta guardada' : 'Cuentas de clientes'}</h3><p className="cloud-status">{authUser ? `Solo tú: ${authUser.email} · ${editingPending?.slotId === client.id ? (pendingSyncStatus === 'saving' ? 'guardando cuenta…' : pendingSyncStatus === 'error' ? 'error al guardar cuenta' : 'cuenta sincronizada') : (syncStatus === 'error' ? 'sincronización pendiente: revisa SQL' : syncStatus === 'loading' ? 'recuperando pestañas…' : 'pestañas sincronizadas')}` : 'Inicia sesión una vez para sincronizar todas las pestañas.'}</p></div><div className="cloud-actions"><button type="button" className="btn" onClick={() => authUser ? setQrReceiverEnabled(v => !v) : loadPending()}>{qrReceiverEnabled ? 'QR del celular: activo' : 'Activar QR del celular'}</button><span style={{fontSize:12}} role="status">{authUser ? qrPcStatus : 'Inicia sesión con la misma cuenta de la APK.'}{slotQrCodes[client.id] ? ' · Código de esta pestaña: ' + slotQrCodes[client.id] : ''}</span><a className="btn" href="https://vasquezpalparoy-star.github.io/travajos-por-entregar-nuebo-junto-al-cuanta-por-llevar/" target="_blank" rel="noopener noreferrer">Trabajos QR / celular</a><button type="button" className="btn" onClick={loadPending}><Icon name="layers"/> Ver cuentas guardadas</button><button type="button" className="btn btn-primary" disabled={cloudBusy} onClick={() => savePending(client)}><Icon name="upload"/> {editingPending?.slotId === client.id ? 'Guardar cuenta editada' : 'Guardar cuenta pendiente'}</button>{editingPending?.slotId === client.id && <button type="button" className="btn" disabled={cloudBusy} onClick={() => finishEditing(client)}>Guardar y marcar recogido</button>}</div></div>
                                     </div>}
                                     <div className="panel items-panel"><div className="panel-head"><div><h2 className="panel-title">Detalle de productos</h2><p className="panel-desc">Puedes usar operaciones en las cantidades, por ejemplo 2+3</p></div><span className="save-state">{client.items.length} {client.items.length === 1 ? 'fila' : 'filas'}</span></div>
                                         <div className="table-wrap"><table className="items-table"><thead><tr><th>Producto</th><th>Precio unitario</th><th>Cantidades</th><th>Subtotal</th><th>Acción</th></tr></thead><tbody>{client.items.map(item => {
