@@ -248,6 +248,11 @@
             const [cloudPassword, setCloudPassword] = useState('');
             const [pendingOpen, setPendingOpen] = useState(false);
             const [slotQrCodes, setSlotQrCodes] = useState({});
+            const [qrAccountDraft, setQrAccountDraft] = useState(null);
+            const qrDraftRef = useRef(null);
+            qrDraftRef.current = qrAccountDraft;
+            const [qrAccountBusy, setQrAccountBusy] = useState(false);
+            const [qrAccountError, setQrAccountError] = useState('');
             const [qrReceiverEnabled, setQrReceiverEnabled] = useState(true);
             const [qrPcStatus, setQrPcStatus] = useState('Inicia sesión para recibir QR del celular.');
             const qrListeningSince = useRef(new Date().toISOString());
@@ -353,52 +358,65 @@
                 const api = supabaseRef.current;
                 setQrPcStatus('Esperando QR del celular…');
                 const poll = async () => {
-                    if (busy || document.hidden) return;
+                    if (busy || qrDraftRef.current) return;
                     busy = true;
                     try {
-                        const {data:events, error} = await api.from('grafiplot_qr_lecturas')
-                            .select('id,codigo').eq('user_id', authUser.id).is('consumido_en', null)
-                            .gte('leido_en', qrListeningSince.current)
-                            .order('leido_en', {ascending:false}).limit(1);
+                        const {data:events,error} = await api.from('grafiplot_qr_lecturas')
+                            .select('id,codigo,leido_en').eq('user_id',authUser.id).is('consumido_en',null)
+                            .order('leido_en',{ascending:false}).limit(1);
                         if (error) throw error;
                         if (cancelled || !events?.length) return;
                         const event = events[0];
-                        const {data:claimed, error:claimError} = await api.from('grafiplot_qr_lecturas')
+                        const {data:claimed,error:claimError} = await api.from('grafiplot_qr_lecturas')
                             .update({consumido_en:new Date().toISOString()}).eq('id',event.id)
                             .eq('user_id',authUser.id).is('consumido_en',null).select('id');
                         if (claimError) throw claimError;
                         if (cancelled || !claimed?.length) return;
-                        const {data:order, error:orderError} = await api.from('pedidos_pendientes')
-                            .select('id,nombre,telefono,items,total,estado,guardado_en,codigo')
+                        await api.from('grafiplot_qr_lecturas').update({consumido_en:new Date().toISOString()})
+                            .eq('user_id',authUser.id).lte('leido_en',event.leido_en).is('consumido_en',null);
+                        const {data:order,error:orderError} = await api.from('pedidos_pendientes').select('*')
                             .eq('user_id',authUser.id).eq('estado','pendiente').eq('codigo',event.codigo).maybeSingle();
                         if (orderError) throw orderError;
                         if (cancelled) return;
-                        const slot = clientsRef.current.find(c => c.id === activeClientId);
-                        const hasContent = slot?.items.some(item => item.quantities.some(q => evaluateExpression(q) > 0));
-                        if (hasContent && !window.confirm('Se leyó el QR ' + event.codigo + '. La pestaña actual contiene datos. ¿Reemplazarla para abrir esta cuenta?')) {
-                            setQrPcStatus('QR ' + event.codigo + ': apertura cancelada.'); return;
-                        }
-                        setSlotQrCodes(prev => ({...prev,[activeClientId]:event.codigo}));
-                        if (order) {
-                            setClients(prev => prev.map(c => c.id === activeClientId ? {...c,name:order.nombre || c.name,phone:order.telefono || '',items:orderItems(order)} : c));
-                            setEditingPending({id:order.id,slotId:activeClientId,estado:order.estado});
-                            setQrPcStatus('QR ' + event.codigo + ': cuenta abierta para editar.');
-                        } else {
-                            setClients(prev => prev.map(c => c.id === activeClientId ? {...c,...emptySlot(c.id)} : c));
-                            setEditingPending(null);
-                            setQrPcStatus('QR ' + event.codigo + ' libre: completa los datos y guarda la cuenta pendiente.');
-                        }
-                        setPendingOpen(false); setShowClientInfo(true); setShowOverview(true);
-                        setCloudNotice('Código QR asignado a esta pestaña: ' + event.codigo);
-                        window.scrollTo({top:0,behavior:'smooth'});
+                        setQrAccountError('');
+                        setQrAccountDraft({id:order?.id || null,codigo:event.codigo,nombre:order?.nombre || '',
+                            telefono:order?.telefono || '',descripcion:order?.descripcion || '',
+                            total:order?.total ?? '',pago:order?.pago ?? 0,hojas:order?.hojas || 1,
+                            ubicacion:order?.ubicacion || 'E1',items:order?.items || []});
+                        setPendingOpen(false);
+                        setQrPcStatus('QR ' + event.codigo + ': cuadro de datos abierto.');
+                        document.title = 'QR ' + event.codigo + ' · Completar datos';
                     } catch (error) {
                         if (!cancelled) setQrPcStatus('No se pudo recibir QR: ' + describeCloudError(error));
                     } finally { busy = false; }
                 };
                 poll();
-                const timer = setInterval(poll, 2000);
-                return () => { cancelled = true; clearInterval(timer); };
-            }, [authUser?.id, activeClientId, qrReceiverEnabled]);
+                const timer = setInterval(poll,1500);
+                return () => {cancelled=true;clearInterval(timer);};
+            },[authUser?.id,qrReceiverEnabled]);
+
+            const saveQrAccount = async event => {
+                event.preventDefault();
+                if (!qrAccountDraft || !authUser || qrAccountBusy) return;
+                setQrAccountBusy(true); setQrAccountError('');
+                try {
+                    const d = qrAccountDraft, total = Number(d.total) || 0;
+                    const baseItems = d.items.filter(i => i.name !== 'Ajuste de precio');
+                    const baseTotal = baseItems.reduce((sum,i) => sum + (i.quantities || []).reduce((n,q) => n + evaluateExpression(String(q)),0) * (Number(i.price)||0),0);
+                    const difference = Math.round((total - baseTotal)*100)/100;
+                    const items = baseItems.length ? [...baseItems,...(difference ? [{name:'Ajuste de precio',price:difference,quantities:['1'],isCustom:true}] : [])]
+                        : [{name:d.descripcion || 'Trabajo QR',price:total,quantities:['1'],isCustom:true}];
+                    const payload={codigo:d.codigo,nombre:d.nombre.trim().toUpperCase(),telefono:d.telefono,
+                        descripcion:d.descripcion,total,pago:Number(d.pago)||0,hojas:Number(d.hojas)||1,ubicacion:d.ubicacion,items};
+                    const {error} = d.id
+                        ? await supabaseRef.current.from('pedidos_pendientes').update(payload).eq('id',d.id).eq('user_id',authUser.id)
+                        : await supabaseRef.current.from('pedidos_pendientes').insert({...payload,user_id:authUser.id,estado:'pendiente'});
+                    if (error) throw error;
+                    setQrAccountDraft(null);setQrPcStatus('Cuenta QR ' + d.codigo + ' guardada y sincronizada.');
+                    document.title='Grafiplot · Gestión de pedidos';
+                } catch (error) {setQrAccountError(describeCloudError(error));}
+                finally {setQrAccountBusy(false);}
+            };
 
             const pendingPayload = (client) => {
                 const activeItems = client.items.filter(item => item.quantities.some(q => evaluateExpression(q) > 0));
@@ -976,6 +994,22 @@
                             })}
                         </div>
                     </main>
+                    {qrAccountDraft && <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Completar cuenta QR">
+                        <form className="receipt-modal" onSubmit={saveQrAccount} style={{maxWidth:620,maxHeight:'90vh',overflowY:'auto'}}>
+                            <div className="receipt-modal-head"><h3>QR {qrAccountDraft.codigo} · {qrAccountDraft.id ? 'Editar cuenta' : 'Completar datos'}</h3><button type="button" className="icon-btn" onClick={() => setQrAccountDraft(null)} aria-label="Cerrar">✕</button></div>
+                            <div className="cloud-login">
+                                <label>Nombre del cliente<input autoFocus required className="text-input" value={qrAccountDraft.nombre} onChange={e => setQrAccountDraft(d => ({...d,nombre:e.target.value}))}/></label>
+                                <label>Celular<input className="text-input" type="tel" value={qrAccountDraft.telefono} onChange={e => setQrAccountDraft(d => ({...d,telefono:e.target.value}))}/></label>
+                                <label>Descripción del trabajo<input className="text-input" value={qrAccountDraft.descripcion} onChange={e => setQrAccountDraft(d => ({...d,descripcion:e.target.value}))}/></label>
+                                <label>Total S/<input required min="0" step="0.01" type="number" className="text-input" value={qrAccountDraft.total} onChange={e => setQrAccountDraft(d => ({...d,total:e.target.value}))}/></label>
+                                <label>A cuenta S/<input min="0" step="0.01" type="number" className="text-input" value={qrAccountDraft.pago} onChange={e => setQrAccountDraft(d => ({...d,pago:e.target.value}))}/></label>
+                                <label>Hojas<input required min="1" type="number" className="text-input" value={qrAccountDraft.hojas} onChange={e => setQrAccountDraft(d => ({...d,hojas:e.target.value}))}/></label>
+                                <label>Estante<select className="text-input" value={qrAccountDraft.ubicacion} onChange={e => setQrAccountDraft(d => ({...d,ubicacion:e.target.value}))}>{['E1','E2','E3','E4'].map(v => <option key={v} value={v}>{v}</option>)}</select></label>
+                                {qrAccountError && <p role="alert" className="cloud-error">{qrAccountError}</p>}
+                                <button disabled={qrAccountBusy} className="btn btn-primary" type="submit">{qrAccountBusy ? 'Guardando…' : 'Guardar cuenta QR'}</button>
+                            </div>
+                        </form>
+                    </div>}
                     <ReceiptModal/>
                     {pendingOpen && <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="Pedidos pendientes"><div className="receipt-modal pending-modal">
                         <div className="receipt-modal-head"><h3>Pedidos pendientes de recojo</h3><button type="button" className="icon-btn" style={{color:'white'}} onClick={() => { setPendingOpen(false); setCloudError(''); }} aria-label="Cerrar"><Icon name="close"/></button></div>
