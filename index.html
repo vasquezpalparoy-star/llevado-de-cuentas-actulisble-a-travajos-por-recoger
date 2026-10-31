@@ -237,8 +237,8 @@
             const [showClientInfo, setShowClientInfo] = useState(false);
             const [showOverview, setShowOverview] = useState(() => localStorage.getItem('grafiplot_show_overview') !== 'false');
             useEffect(() => { localStorage.setItem('grafiplot_show_overview', String(showOverview)); }, [showOverview]);
-            const [supabaseUrl, setSupabaseUrl] = useState(() => localStorage.getItem('grafiplot_supabase_url') || '');
-            const [supabaseKey, setSupabaseKey] = useState(() => localStorage.getItem('grafiplot_supabase_key') || '');
+            const [supabaseUrl, setSupabaseUrl] = useState('https://gyvztqpvgtinxoqhyfbw.supabase.co');
+            const [supabaseKey, setSupabaseKey] = useState('sb_publishable_m5tDCWoaiu-xP-lezwd3Lg_rlUfq118');
             const [draftUrl, setDraftUrl] = useState(supabaseUrl);
             const [draftKey, setDraftKey] = useState(supabaseKey);
             const [cloudReady, setCloudReady] = useState(false);
@@ -330,6 +330,19 @@
                 } catch (err) { setCloudError(describeCloudError(err)); }
                 finally { setCloudBusy(false); }
             };
+            useEffect(() => {
+                if (!pendingOpen || !authUser?.id || !supabaseRef.current) return;
+                let cancelled = false;
+                const timer = setInterval(async () => {
+                    const {data, error} = await supabaseRef.current.from('pedidos_pendientes')
+                        .select('id,nombre,telefono,items,total,estado,guardado_en')
+                        .eq('user_id', authUser.id)
+                        .order('guardado_en', {ascending:false}).limit(200);
+                    if (!cancelled && !error) setPendingOrders(data || []);
+                }, 6000);
+                return () => { cancelled = true; clearInterval(timer); };
+            }, [pendingOpen, authUser?.id]);
+
             const pendingPayload = (client) => {
                 const activeItems = client.items.filter(item => item.quantities.some(q => evaluateExpression(q) > 0));
                 return {
@@ -882,7 +895,7 @@
                                         <div className="panel-head"><div><h2 className="panel-title">Información del cliente</h2><p className="panel-desc">Nombre y teléfono para pedidos pendientes y boletas</p></div><button type="button" className="client-toggle" onClick={() => setShowClientInfo(v => !v)} aria-expanded={showClientInfo}>{showClientInfo ? 'Ocultar datos' : 'Mostrar datos'}</button></div>
                                         {showClientInfo && <div className="panel-body field-grid"><label><span className="field-label">Nombre del cliente</span><input className="text-input" type="text" value={client.name} onChange={e => handleUpdateClientName(client.id, e.target.value)} placeholder="Nombre o referencia"/></label><label><span className="field-label">Número de WhatsApp</span><input className="text-input" type="tel" value={client.phone || ''} onChange={e => handleUpdateClientPhone(client.id, e.target.value)} placeholder="Ej. 999 999 999"/></label></div>}
                                     </div>
-                                    <div className="panel action-panel cloud-panel"><div><h3>{editingPending?.slotId === client.id ? 'Editando cuenta guardada' : 'Cuentas de clientes'}</h3><p className="cloud-status">{authUser ? `Solo tú: ${authUser.email} · ${editingPending?.slotId === client.id ? (pendingSyncStatus === 'saving' ? 'guardando cuenta…' : pendingSyncStatus === 'error' ? 'error al guardar cuenta' : 'cuenta sincronizada') : (syncStatus === 'error' ? 'sincronización pendiente: revisa SQL' : syncStatus === 'loading' ? 'recuperando pestañas…' : 'pestañas sincronizadas')}` : 'Inicia sesión una vez para sincronizar todas las pestañas.'}</p></div><div className="cloud-actions"><button type="button" className="btn" onClick={loadPending}><Icon name="layers"/> Ver cuentas guardadas</button><button type="button" className="btn btn-primary" disabled={cloudBusy} onClick={() => savePending(client)}><Icon name="upload"/> {editingPending?.slotId === client.id ? 'Guardar cuenta editada' : 'Guardar cuenta pendiente'}</button>{editingPending?.slotId === client.id && <button type="button" className="btn" disabled={cloudBusy} onClick={() => finishEditing(client)}>Guardar y marcar recogido</button>}</div></div>
+                                    <div className="panel action-panel cloud-panel"><div><h3>{editingPending?.slotId === client.id ? 'Editando cuenta guardada' : 'Cuentas de clientes'}</h3><p className="cloud-status">{authUser ? `Solo tú: ${authUser.email} · ${editingPending?.slotId === client.id ? (pendingSyncStatus === 'saving' ? 'guardando cuenta…' : pendingSyncStatus === 'error' ? 'error al guardar cuenta' : 'cuenta sincronizada') : (syncStatus === 'error' ? 'sincronización pendiente: revisa SQL' : syncStatus === 'loading' ? 'recuperando pestañas…' : 'pestañas sincronizadas')}` : 'Inicia sesión una vez para sincronizar todas las pestañas.'}</p></div><div className="cloud-actions"><a className="btn" href="https://vasquezpalparoy-star.github.io/travajos-por-entregar-nuebo-junto-al-cuanta-por-llevar/" target="_blank" rel="noopener noreferrer">Trabajos QR / celular</a><button type="button" className="btn" onClick={loadPending}><Icon name="layers"/> Ver cuentas guardadas</button><button type="button" className="btn btn-primary" disabled={cloudBusy} onClick={() => savePending(client)}><Icon name="upload"/> {editingPending?.slotId === client.id ? 'Guardar cuenta editada' : 'Guardar cuenta pendiente'}</button>{editingPending?.slotId === client.id && <button type="button" className="btn" disabled={cloudBusy} onClick={() => finishEditing(client)}>Guardar y marcar recogido</button>}</div></div>
                                     </div>}
                                     <div className="panel items-panel"><div className="panel-head"><div><h2 className="panel-title">Detalle de productos</h2><p className="panel-desc">Puedes usar operaciones en las cantidades, por ejemplo 2+3</p></div><span className="save-state">{client.items.length} {client.items.length === 1 ? 'fila' : 'filas'}</span></div>
                                         <div className="table-wrap"><table className="items-table"><thead><tr><th>Producto</th><th>Precio unitario</th><th>Cantidades</th><th>Subtotal</th><th>Acción</th></tr></thead><tbody>{client.items.map(item => {
@@ -914,13 +927,13 @@
                             <label><span className="field-label">Clave publishable (o anon)</span><input className="text-input" type="text" required value={draftKey} onChange={e => setDraftKey(e.target.value)} placeholder="sb_publishable_..." autoComplete="off"/></label>
                             {cloudError && <p className="cloud-error" role="alert">{cloudError}</p>}
                             <button type="submit" className="btn btn-primary">Guardar conexión</button>
-                        </form> : !cloudReady ? <div className="cloud-login"><p>Conectando con Supabase… Revisa tu conexión a Internet si esto permanece en pantalla.</p><button type="button" className="btn" onClick={changeSupabaseConfig}>Cambiar conexión</button></div> : !authUser ? <form className="cloud-login" onSubmit={logInCloud}>
-                            <p>Inicia sesión con una cuenta creada en Supabase Auth. La aplicación es solo para ti; tus pestañas y cuentas se sincronizarán automáticamente.</p>
+                        </form> : !cloudReady ? <div className="cloud-login"><p>Conectando con Supabase… Revisa tu conexión a Internet si esto permanece en pantalla.</p></div> : !authUser ? <form className="cloud-login" onSubmit={logInCloud}>
+                            <p>Ingresa con el mismo correo y contraseña que usas en la APK Trabajos QR. Para que un pedido aparezca en el celular, pulsa Guardar cuenta pendiente.</p>
                             <label><span className="field-label">Correo electrónico</span><input className="text-input" type="email" required value={cloudEmail} onChange={e => setCloudEmail(e.target.value)} autoComplete="username"/></label>
                             <label><span className="field-label">Contraseña</span><input className="text-input" type="password" required value={cloudPassword} onChange={e => setCloudPassword(e.target.value)} autoComplete="current-password"/></label>
                             {cloudError && <p className="cloud-error" role="alert">{cloudError}</p>}
                             <button type="submit" className="btn btn-primary" disabled={cloudBusy}>Iniciar sesión</button>
-                            <button type="button" className="btn" onClick={changeSupabaseConfig}>Cambiar conexión</button>
+                            
                         </form> : <>
                             <div className="pending-list">
                                 {cloudError && <p className="cloud-error" role="alert">{cloudError}</p>}
@@ -937,7 +950,7 @@
                                     </div>
                                 </div>)}
                             </div>
-                            <div className="receipt-actions" style={{borderTop:'1px solid #e5eaf0',display:'flex',justifyContent:'space-between',flexWrap:'wrap'}}><button type="button" className="btn" disabled={cloudBusy} onClick={loadPending}>Actualizar lista</button><button type="button" className="btn" onClick={() => supabaseRef.current.auth.signOut()}>Cerrar sesión</button><button type="button" className="btn" onClick={changeSupabaseConfig}>Cambiar conexión</button></div>
+                            <div className="receipt-actions" style={{borderTop:'1px solid #e5eaf0',display:'flex',justifyContent:'space-between',flexWrap:'wrap'}}><button type="button" className="btn" disabled={cloudBusy} onClick={loadPending}>Actualizar lista</button><button type="button" className="btn" onClick={() => supabaseRef.current.auth.signOut()}>Cerrar sesión</button></div>
                         </>}
                     </div></div>}
                 </div>
